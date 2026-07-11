@@ -1,0 +1,51 @@
+# ==========================================================
+# Application Configuration
+# ==========================================================
+application:
+  name: healthcare-ingestion
+  environment: local
+  timezone: Asia/Kolkata
+# ==========================================================
+# FHIR API Configuration
+# ==========================================================
+fhir:
+  base_url: "https://hapi.fhir.org/baseR4"
+  timeout_seconds: 60
+  page_size: 500
+  max_retries: 3
+  retry_backoff_seconds: 5
+# ==========================================================
+# Landing Zone (AWS S3)
+# ==========================================================
+aws:
+  region: ap-south-1
+  bucket_name: healthcare-data-lake
+  landing_prefix: landing
+# ==========================================================
+# Snowflake
+# ==========================================================
+snowflake:
+  warehouse: INGEST_WH
+  database: HEALTHCARE_DB
+  schema: RAW
+# ==========================================================
+# Extraction
+# ==========================================================
+extraction:
+  save_format: json
+  compression: false
+# ==========================================================
+# Logging
+# ==========================================================
+logging:
+  level: INFO
+# ==========================================================
+# Audit
+# ==========================================================
+audit:
+  table_name: INGESTION_AUDIT
+# ==========================================================
+# Checkpoint
+# ==========================================================
+checkpoint:
+  table_name: INGESTION_CHECKPOINT
