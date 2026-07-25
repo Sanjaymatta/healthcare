@@ -23,6 +23,12 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
+    "--last-updated",
+    required=False,
+    help="Checkpoint timestamp",
+    )
+
+    parser.add_argument(
         "--s3-prefix",
         required=True,
         help="S3 Prefix",
@@ -49,6 +55,7 @@ def main() -> int:
 
         result = extractor.extract(
             resource_name=args.resource,
+            last_updated=args.last_updated,
             run_id=args.run_id,
             s3_prefix=args.s3_prefix,
         )

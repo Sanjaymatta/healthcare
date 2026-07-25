@@ -6,7 +6,6 @@ from threading import Event
 
 from src.api.client import FHIRClient
 from src.api.paginator import FHIRPaginator
-from src.extractors.checkpoint_manager import CheckpointManager
 from src.common.logger import get_logger
 from src.extractors.result import ExtractionResult
 from src.extractors.worker import UploadTask, UploadWorker
@@ -20,12 +19,13 @@ class ResourceExtractor:
     def __init__(self) -> None:
 
         self.client = FHIRClient()
-        self.checkpoint_manager = CheckpointManager()
+        
         self.s3_client = S3Client()
 
     def extract(
         self,
         resource_name: str,
+        last_updated: str | None,
         run_id: str,
         s3_prefix: str,
     ) -> ExtractionResult:
@@ -36,10 +36,9 @@ class ResourceExtractor:
 
         start_time = datetime.utcnow()
 
-        checkpoint = self.checkpoint_manager.get_checkpoint(
-            resource_name
-        )
+        run_folder = start_time.strftime("%Y%m%d_%H%M%S")
 
+        
         upload_queue: Queue[UploadTask] = Queue()
 
         stop_event = Event()
@@ -59,94 +58,124 @@ class ResourceExtractor:
 
         next_page = None
 
-        while True:
+        try:
 
-            bundle = self.client.get_resource(
-                resource=resource_name,
-                last_updated=checkpoint,
-                page_url=next_page,
-            )
+            while True:
 
-            entries = bundle.get("entry", [])
-
-            if not entries:
-                break
-
-            total_pages += 1
-            total_records += len(entries)
-
-            last_resource = entries[-1].get("resource")
-
-            if last_resource:
-
-                last_updated = (
-                    last_resource
-                    .get("meta", {})
-                    .get("lastUpdated")
+                bundle = self.client.get_resource(
+                    resource=resource_name,
+                    last_updated=last_updated,
+                    page_url=next_page,
                 )
 
-                if (
-                    last_updated
-                    and (
-                        max_last_updated is None
-                        or last_updated > max_last_updated
+                entries = bundle.get("entry", [])
+
+                if not entries:
+                    break
+
+                total_pages += 1
+                total_records += len(entries)
+
+                last_resource = entries[-1].get("resource")
+
+                if last_resource:
+
+                    current_last_updated = (
+                        last_resource
+                        .get("meta", {})
+                        .get("lastUpdated")
                     )
-                ):
-                    max_last_updated = last_updated
 
-          
+                    if (
+                        current_last_updated
+                        and (
+                            max_last_updated is None
+                            or current_last_updated > max_last_updated
+                        )
+                    ):
+                        max_last_updated = current_last_updated
 
-            s3_key = (
-            f"{s3_prefix}/"
-            f"{resource_name}/"
-            f"{start_time.strftime('%Y%m%d_%H%M%S')}/"
-            f"{resource_name}_page_{total_pages:05}.json"
-            )
+            
 
-            upload_queue.put(
-                UploadTask(
-                    resource_name=resource_name,
-                    page_number=total_pages,
-                    bundle=bundle,
-                    s3_key=s3_key,
+                s3_key = (
+                f"{s3_prefix}/"
+                f"{resource_name}/"
+                f"{run_folder}/"
+                f"{resource_name}_page_{total_pages:05}.json"
                 )
-            )
 
-            files_uploaded += 1
+                upload_queue.put(
+                    UploadTask(
+                        resource_name=resource_name,
+                        page_number=total_pages,
+                        bundle=bundle,
+                        s3_key=s3_key,
+                    )
+                )
 
-            next_page = FHIRPaginator.get_next_page(bundle)
+                files_uploaded += 1
 
-            if next_page is None:
-                break
+                next_page = FHIRPaginator.get_next_page(bundle)
 
+                if next_page is None:
+                    break
+
+        finally:
             upload_queue.join()
 
             stop_event.set()
 
             worker.join()
 
-            end_time = datetime.utcnow()
+        end_time = datetime.utcnow()
 
-            logger.info(
-                "Extraction completed for resource: %s",
-                resource_name,
-            )
+        logger.info(
+            "Extraction completed for resource: %s",
+            resource_name,
+        )
 
-            logger.info(
-                "Pages Processed: %s | Records Extracted: %s | Files Uploaded: %s",
-                total_pages,
-                total_records,
-                files_uploaded,
-            )
+        logger.info(
+            "Pages Processed: %s | Records Extracted: %s | Files Uploaded: %s",
+            total_pages,
+            total_records,
+            files_uploaded,
+        )
 
-            return ExtractionResult(
-                resource_name=resource_name,
-                run_id=run_id,
-                records_extracted=total_records,
-                pages_processed=total_pages,
-                files_uploaded=files_uploaded,
-                s3_prefix=s3_prefix,
-                max_last_updated=max_last_updated,
-                started_at=start_time,
-                completed_at=end_time,
-            )
+        result = ExtractionResult(
+            resource_name=resource_name,
+            run_id=run_id,
+            records_extracted=total_records,
+            pages_processed=total_pages,
+            files_uploaded=files_uploaded,
+            s3_prefix=s3_prefix,
+            max_last_updated=max_last_updated,
+            started_at=start_time,
+            completed_at=end_time,
+        )
+
+        metadata_key = (
+            f"{s3_prefix}/"
+            f"{resource_name}/"
+            f"{run_folder}/"
+            "_metadata.json"
+        )
+
+        self.s3_client.upload_metadata(
+            result=result,
+            s3_key=metadata_key,
+        )
+
+
+        return result
+
+        # return ExtractionResult(
+        #     resource_name=resource_name,
+        #     run_id=run_id,
+        #     records_extracted=total_records,
+        #     pages_processed=total_pages,
+        #     files_uploaded=files_uploaded,
+        #     s3_prefix=s3_prefix,
+        #     max_last_updated=max_last_updated,
+        #     started_at=start_time,
+        #     completed_at=end_time,
+        # )
