@@ -25,6 +25,37 @@ class S3Client:
             region_name=config.get("aws.region"),
         )
 
+    def upload_metadata(
+    self,
+    result,
+    s3_key: str,
+    ) -> None:
+
+        try:
+
+            logger.info(f"Uploading metadata to {s3_key}")
+
+            buffer = BytesIO(
+                orjson.dumps(
+                    asdict(result),
+                    option=orjson.OPT_INDENT_2,
+                )
+            )
+
+            self.client.upload_fileobj(
+                Fileobj=buffer,
+                Bucket=self.bucket_name,
+                Key=s3_key,
+            )
+
+            logger.info("Metadata upload completed.")
+
+        except (ClientError, BotoCoreError) as e:
+
+            logger.exception("Metadata upload failed.")
+
+            raise StorageError(str(e)) from e
+
     def upload_bundle(
         self,
         bundle: dict[str, Any],
