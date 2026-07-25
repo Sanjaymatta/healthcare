@@ -6,7 +6,7 @@ from threading import Event
 
 from src.api.client import FHIRClient
 from src.api.paginator import FHIRPaginator
-from src.checkpoint.checkpoint_manager import CheckpointManager
+from src.extractors.checkpoint_manager import CheckpointManager
 from src.common.logger import get_logger
 from src.extractors.result import ExtractionResult
 from src.extractors.worker import UploadTask, UploadWorker
