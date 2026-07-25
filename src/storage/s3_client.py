@@ -4,7 +4,7 @@ from typing import Any
 import boto3
 import orjson
 from botocore.exceptions import BotoCoreError, ClientError
-
+from dataclasses import asdict
 from src.common.config import ConfigManager
 from src.common.exceptions import StorageError
 from src.common.logger import get_logger
