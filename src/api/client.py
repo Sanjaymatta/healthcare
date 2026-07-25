@@ -48,6 +48,7 @@ class FHIRClient:
         if page_url is None:
 
             params["_count"] = self.page_size
+            params["_sort"] = "_lastUpdated"
 
             if last_updated:
                 params["_lastUpdated"] = f"gt{last_updated}"
