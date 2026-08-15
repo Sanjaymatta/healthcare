@@ -1,0 +1,7 @@
+resources:
+  - Patient
+  - Practitioner
+  - PractitionerRole
+  - Organization
+  - Appointment
+  
