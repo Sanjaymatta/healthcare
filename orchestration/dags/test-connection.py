@@ -39,10 +39,10 @@ with DAG(
     def test_snowflake_connection():
 
         hook = SnowflakeHook(
-            snowflake_conn_id="snowflake_fhir"
+            snowflake_conn_id="snowflake_connection"
         )
 
-        result = hook.get_first("SELECT CURRENT_TIMESTAMP()")
+        result = hook.get_first("show tables")
 
         print(result)    
 
