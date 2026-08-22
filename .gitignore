@@ -9,6 +9,8 @@ __pycache__/
 
 logs/
 
+/test_ecs/
+
 .venv/
 
 venv/
@@ -16,6 +18,15 @@ venv/
 .envrc
 
 *.log
+
+.flocirc/
+
+.flocirc
+
+
+./floci-data   
+
+./floci-data/
 
 .airflow/
 
