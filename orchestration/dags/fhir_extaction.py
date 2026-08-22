@@ -1,10 +1,10 @@
 from datetime import datetime
 
-from airflow.sdk import DAG, task
+from airflow.sdk import DAG, task, get_current_context
 from airflow.providers.standard.operators.python import PythonOperator
 from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
 from airflow.hooks.base import BaseHook
-
+from airflow.providers.amazon.aws.operators.ecs import EcsRunTaskOperator
 
 from pathlib import Path
 
@@ -102,16 +102,64 @@ with DAG(
         return results
 
     @task(
-            task_id="extract_resources"
+            task_id="generate_run_id"
     )
-    def extract_resources(resource: str):
-        print(f"Processing FHIR resource: {resource}")
+    def get_run_id():
+        context = get_current_context()
+        return context["dag_run"].run_id
+
+    @task(
+    task_id="build_ecs_inputs"
+    )
+    def build_ecs_inputs(checkpoints, execution_id):
+
+        return [
+            {
+                "containerOverrides": [
+                    {
+                        "name": "fhir-extractor",
+                        "command": [
+                            "--resource",
+                            item["resource"],
+                            "--last-updated",
+                            str(item["last_updated"]),
+                            "--run-id",
+                            execution_id,
+                            "--s3-prefix",
+                            "raw/fhir",
+                        ],
+                    }
+                ]
+            }
+            for item in checkpoints
+        ]
+
+    
 
     
 
 
     resources = load_resources()
     checkpoints = get_checkpoints(resources)
-    # extract_resources.expand(
-    #     resource=resources
-    # )
+    execution_id = get_run_id()
+    ecs_inputs = build_ecs_inputs(
+        checkpoints,
+        execution_id,
+    )   
+
+    ecs_tasks = EcsRunTaskOperator.partial(
+
+        task_id="extract_resource",
+        cluster="{{ var.json.FHIR_ECS_CONFIG.cluster }}",
+        task_definition="{{ var.json.FHIR_ECS_CONFIG.task_definition }}",
+        # cluster="fhir-local-cluster",
+        # task_definition="fhir-extractor:8",
+        launch_type="FARGATE",
+        
+        wait_for_completion=True,
+        deferrable=True,
+        ).expand(
+            overrides=ecs_inputs
+    )
+
+       
